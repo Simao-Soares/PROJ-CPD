@@ -13,8 +13,8 @@
 typedef struct _node {
     double radius;
     long id;
-    struct _node *L;
-    struct _node *R;
+    long L;
+    long R;
 } node_t;
 
 //node of Q-Sort algorithm
@@ -34,6 +34,9 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points);
 double computeDistance(double *p1, double *p2, int n_dims, int starter);
 void orthogonalProjection(double **pts, double *a,double *b,int n_dims, int n_points);
 int findMedian(double **pts, int n_points,int n_dims, double *a);
+void quickSort(double **array, int low, int high, int n_dims, double *a);
+void swap(double **a, double **b);
+int partition(double **array, int low, int high, int n_dims, double *a);
 
 
 /* main: process parameters */
@@ -67,11 +70,9 @@ double computeDistance(double *p1, double *p2, int n_dims, int starter)
 
     for(i=0; i<n_dims; i++)
     {
-      printf("%f - %f\n", p1[i], p2[i+starter]);
       result = result + ((p1[i] - p2[i+starter]) * (p1[i] - p2[i+starter]));
     }
     result = sqrt(result);
-    printf("%f\n\n", result);
     return result;
 }
 
@@ -127,7 +128,8 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points)
         mostDistant[0] = pts[i];
       }
   }
-  for(i=0; i<n_points && i != a_index; i++){ // ver se a condiçao do i afeta a performance
+  greaterDistance = 0;
+  for(i=0; i<n_points; i++){ // ver se a condiçao do i afeta a performance
     possibleGreaterDistance = computeDistance(pts[a_index], pts[i], n_dims, 0);
     if( possibleGreaterDistance > greaterDistance)
       {
@@ -135,20 +137,6 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points)
         mostDistant[1] = pts[i];
       }  
   }
-
-  /*for(i=0; i < n_points; i++)
-  {
-    for(j = i+1; j< n_points; j++)
-    {
-      possibleGreaterDistance = computeDistance(pts[i], pts[j], n_dims, 0);
-      if( possibleGreaterDistance > greaterDistance)
-      {
-        greaterDistance = possibleGreaterDistance;
-        mostDistant[0] = pts[i];
-        mostDistant[1] = pts[j];
-      }
-    }
-  }*/
   return mostDistant;
 }
 
@@ -156,10 +144,10 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points)
 int findMedian(double **pts, int n_points,int n_dims, double *a)
 {
   int i = 0;
-  int j =0;
   int sumLefts = 0;
   int medianIndex = n_points/2;
   int notLeaf = 1;
+  int even = n_points % 2;
   qNode *root = NULL;
   root = (qNode *) malloc(sizeof(qNode));
   root->right = NULL;
@@ -167,16 +155,11 @@ int findMedian(double **pts, int n_points,int n_dims, double *a)
   root->nLefts = 0;
   qNode *aux = NULL;
   aux = (qNode *) malloc(sizeof(qNode));
+  double **left;
+  double **right;
 
-  for ( i = 0; i < n_points; i++)
-  {
-    for ( j = 0; j < n_dims; j++)
-    {
-      printf("ponto %d : %f \n",i,pts[i][j]);
-    }
-    printf("\n");
-    
-  }
+  left = (double **) create_array_pts(n_dims, medianIndex);
+  right = (double **) create_array_pts(n_dims, medianIndex + even);
   
 
   
@@ -189,11 +172,6 @@ int findMedian(double **pts, int n_points,int n_dims, double *a)
     {
       continue;
     }
-    for(j=0;j<n_dims;j++)
-    {
-      printf("%d!-%f\n",i, pts[i][j]);
-    }
-    printf("\n");
     qNode *me = NULL;
     me = (qNode *) malloc(sizeof(qNode));
     me->right = NULL;
@@ -228,6 +206,14 @@ int findMedian(double **pts, int n_points,int n_dims, double *a)
   }
 
   aux = root;
+  for(i=0; i<n_points; i++)
+  {
+    while(aux->left != NULL)
+    {
+      aux = aux->left;
+    }
+
+  }
   while(aux->nLefts + sumLefts != medianIndex)
   {
 
@@ -253,12 +239,66 @@ int findMedian(double **pts, int n_points,int n_dims, double *a)
 
 }
 
+void swap(double **a, double **b) {
+  double *t = NULL;
+  t = *a;
+  *a = *b;
+  *b = t;
+}
+
+// Function to partition the array on the basis of pivot element
+int partition(double **array, int low, int high, int n_dims, double *a) {
+  
+  // Select the pivot element
+  double *pivot = array[high];
+  double pivotDistance = computeDistance(a, pivot, n_dims, n_dims);
+  int i = (low - 1);
+
+  // Put the elements smaller than pivot on the left 
+  // and greater than pivot on the right of pivot
+  for (int j = low; j < high; j++) {
+    if (computeDistance(a, array[j], n_dims, n_dims) <= pivotDistance) {
+      i++;
+      swap(&array[i], &array[j]);
+    }
+  }
+  swap(&array[i + 1], &array[high]);
+  return (i + 1);
+}
+
+void quickSort(double **array, int low, int high, int n_dims, double *a) {
+  if (low < high) {
+  
+  // Select pivot position and put all the elements smaller 
+  // than pivot on left and greater than pivot on right
+  int pi = partition(array, low, high, n_dims, a);
+  
+  // Sort the elements on the left of pivot
+  quickSort(array, low, pi - 1, n_dims, a);
+  
+  // Sort the elements on the right of pivot
+  quickSort(array, pi + 1, high, n_dims, a);
+  }
+}
+
 
 //create the ball tree
 node_t *build_tree(double **pts, int n_dims,int n_points)
 {
+  if(n_points == 1)
+  {
+    printf("median: raio = 0\n");
+    for(int i=0; i < n_dims;i++)
+    {
+      printf("%f\n",pts[0][i]);
+    }
+    printf("\n");
+    return NULL;
+  }
   int i=0;
+  int j=0;
   int index = 0;
+  int odd = n_points % 2;
   double **mostDistant = (double **)malloc(2 * sizeof(double*)); //two most distant points in a set (matrix)
   for(i = 0; i < 2; i++)
   {
@@ -268,28 +308,33 @@ node_t *build_tree(double **pts, int n_dims,int n_points)
   mostDistant = computeMostDistantPoints(pts, n_dims, n_points);
   computeDistance(mostDistant[0], mostDistant[1], n_dims, 0);
   orthogonalProjection(pts,mostDistant[0],mostDistant[1], n_dims, n_points);
-
-  /*for ( i = 0; i < n_points; i++)
+  //index = findMedian(pts, n_points, n_dims, mostDistant[0]);
+  quickSort(pts,0,n_points-1, n_dims, mostDistant[0]);
+  for(j=0;j<n_points;j++)
   {
-    for ( int j = 0; j < n_dims; j++)
+    for(i=0; i < n_dims;i++)
     {
-      printf("ponto %d : %f \n",i,pts[i][j]);
+      printf("%f\n",pts[j][i]);
     }
     printf("\n");
-  }*/
-  
-  index = findMedian(pts, n_points, n_dims, mostDistant[0]);
-  printf("median:\n");
+  }
+  index = n_points/2;
+  printf("median: n_points=%d\n",n_points);
   for(i=0; i < n_dims;i++)
   {
-    printf("%f\n",pts[index][i+n_dims]);
+    printf("%f\n",(pts[index][i+ n_dims]+pts[index-1+odd][i+n_dims])/2);
   }
+  printf("\n");
+  build_tree(pts, n_dims, n_points/2);
+  build_tree(&pts[n_points/2], n_dims, n_points/2 + odd);
 
+  
 
 
 
   return NULL;
 }
+
 
 double **create_array_pts(int n_dims, long np)
 {
