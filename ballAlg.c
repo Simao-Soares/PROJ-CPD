@@ -34,9 +34,9 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points);
 double computeDistance(double *p1, double *p2, int n_dims, int starter);
 void orthogonalProjection(double **pts, double *a,double *b,int n_dims, int n_points);
 int findMedian(double **pts, int n_points,int n_dims, double *a);
-void quickSort(double **array, int low, int high, int n_dims, double *a);
+void quickSort(double **array, int low, int high, int n_dims);
 void swap(double **a, double **b);
-int partition(double **array, int low, int high, int n_dims, double *a);
+int partition(double **array, int low, int high, int n_dims);
 
 
 /* main: process parameters */
@@ -110,7 +110,8 @@ void orthogonalProjection(double **pts, double *a,double *b,int n_dims, int n_po
 double **computeMostDistantPoints(double **pts, int n_dims, int n_points)
 {
   int i = 0;
-  int a_index = 0 ;
+  int initial_index = 0;
+  int a_index = 0;
   double greaterDistance = 0;
   double possibleGreaterDistance = 0;
   double **mostDistant = (double **)malloc(2 * sizeof(double*));
@@ -119,8 +120,17 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points)
     mostDistant[i] = (double *)malloc(n_dims * sizeof(double));
   }
 
-  for(i=1; i<n_points ; i++){
-    possibleGreaterDistance = computeDistance(pts[0], pts[i], n_dims, 0);
+  for(i=1;i<n_points;i++)
+  {
+    if(pts[initial_index][n_dims*2 +1] > pts[i][n_dims*2 + 1])
+    {
+      initial_index = i;
+    }
+  }
+  
+
+  for(i=0; i<n_points ; i++){
+    possibleGreaterDistance = computeDistance(pts[initial_index], pts[i], n_dims, 0);
     if( possibleGreaterDistance > greaterDistance)
       {
         greaterDistance = possibleGreaterDistance;
@@ -129,7 +139,7 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points)
       }
   }
   greaterDistance = 0;
-  for(i=0; i<n_points; i++){ // ver se a condiçao do i afeta a performance
+  for(i=0; i<n_points; i++){ 
     possibleGreaterDistance = computeDistance(pts[a_index], pts[i], n_dims, 0);
     if( possibleGreaterDistance > greaterDistance)
       {
@@ -147,7 +157,7 @@ int findMedian(double **pts, int n_points,int n_dims, double *a)
   int sumLefts = 0;
   int medianIndex = n_points/2;
   int notLeaf = 1;
-  int even = n_points % 2;
+  //int even = n_points % 2;
   qNode *root = NULL;
   root = (qNode *) malloc(sizeof(qNode));
   root->right = NULL;
@@ -155,12 +165,7 @@ int findMedian(double **pts, int n_points,int n_dims, double *a)
   root->nLefts = 0;
   qNode *aux = NULL;
   aux = (qNode *) malloc(sizeof(qNode));
-  double **left;
-  double **right;
 
-  left = (double **) create_array_pts(n_dims, medianIndex);
-  right = (double **) create_array_pts(n_dims, medianIndex + even);
-  
 
   
   root->value = computeDistance(a, pts[medianIndex], n_dims, n_dims);
@@ -247,17 +252,16 @@ void swap(double **a, double **b) {
 }
 
 // Function to partition the array on the basis of pivot element
-int partition(double **array, int low, int high, int n_dims, double *a) {
+int partition(double **array, int low, int high, int n_dims) {
   
   // Select the pivot element
-  double *pivot = array[high];
-  double pivotDistance = computeDistance(a, pivot, n_dims, n_dims);
+  double pivotDistance = array[high][n_dims];
   int i = (low - 1);
 
   // Put the elements smaller than pivot on the left 
   // and greater than pivot on the right of pivot
   for (int j = low; j < high; j++) {
-    if (computeDistance(a, array[j], n_dims, n_dims) <= pivotDistance) {
+    if (array[j][n_dims] <= pivotDistance) {
       i++;
       swap(&array[i], &array[j]);
     }
@@ -266,18 +270,18 @@ int partition(double **array, int low, int high, int n_dims, double *a) {
   return (i + 1);
 }
 
-void quickSort(double **array, int low, int high, int n_dims, double *a) {
+void quickSort(double **array, int low, int high, int n_dims) {
   if (low < high) {
   
   // Select pivot position and put all the elements smaller 
   // than pivot on left and greater than pivot on right
-  int pi = partition(array, low, high, n_dims, a);
+  int pi = partition(array, low, high, n_dims);
   
   // Sort the elements on the left of pivot
-  quickSort(array, low, pi - 1, n_dims, a);
+  quickSort(array, low, pi - 1, n_dims);
   
   // Sort the elements on the right of pivot
-  quickSort(array, pi + 1, high, n_dims, a);
+  quickSort(array, pi + 1, high, n_dims);
   }
 }
 
@@ -296,7 +300,7 @@ node_t *build_tree(double **pts, int n_dims,int n_points)
     return NULL;
   }
   int i=0;
-  int j=0;
+  //int j=0;
   int index = 0;
   int odd = n_points % 2;
   double **mostDistant = (double **)malloc(2 * sizeof(double*)); //two most distant points in a set (matrix)
@@ -309,15 +313,7 @@ node_t *build_tree(double **pts, int n_dims,int n_points)
   computeDistance(mostDistant[0], mostDistant[1], n_dims, 0);
   orthogonalProjection(pts,mostDistant[0],mostDistant[1], n_dims, n_points);
   //index = findMedian(pts, n_points, n_dims, mostDistant[0]);
-  quickSort(pts,0,n_points-1, n_dims, mostDistant[0]);
-  for(j=0;j<n_points;j++)
-  {
-    for(i=0; i < n_dims;i++)
-    {
-      printf("%f\n",pts[j][i]);
-    }
-    printf("\n");
-  }
+  quickSort(pts,0,n_points-1, n_dims);
   index = n_points/2;
   printf("median: n_points=%d\n",n_points);
   for(i=0; i < n_dims;i++)
@@ -341,7 +337,7 @@ double **create_array_pts(int n_dims, long np)
     double *_p_arr;
     double **p_arr;
 
-    _p_arr = (double *) malloc(n_dims * np * 2 *sizeof(double));
+    _p_arr = (double *) malloc((n_dims * np * 2 + np) *sizeof(double));
     p_arr = (double **) malloc(np * sizeof(double *));
     if((_p_arr == NULL) || (p_arr == NULL)){
         printf("Error allocating array of points, exiting.\n");
@@ -349,7 +345,7 @@ double **create_array_pts(int n_dims, long np)
     }
 
     for(long i = 0; i < np; i++)
-        p_arr[i] = &_p_arr[i * 2 * n_dims];
+        p_arr[i] = &_p_arr[i * 2 * n_dims + i];
 
     return p_arr;
 }
@@ -385,8 +381,13 @@ double **get_points(int argc, char *argv[], int *n_dims, long *np)
     pt_arr = (double **) create_array_pts(*n_dims, *np);
 
     for(i = 0; i < *np; i++)
+    {
+        pt_arr[i][(*n_dims * 2) + 1] = i;
         for(j = 0; j < *n_dims; j++)
+        {
             pt_arr[i][j] = RANGE * ((double) random()) / RAND_MAX;
+        }
+    }
 
 #ifdef DEBUG
     for(i = 0; i < *np; i++)
