@@ -12,9 +12,10 @@
 
 typedef struct _node {
     double radius;
-    long id;
-    long L;
-    long R;
+    int id;
+    struct _node *L;
+    struct _node *R;
+    double *center;
 } node_t;
 
 //node of Q-Sort algorithm
@@ -28,8 +29,8 @@ typedef struct _qnode {
 
 double **create_array_pts(int n_dims, long np);
 double **get_points(int argc, char *argv[], int *n_dims, long *np);
-node_t *build_tree(double **pts, int n_dims,int n_points);
-void dump_tree(node_t *root);
+node_t *build_tree(double **pts, int n_dims,int n_points, int *id);
+void dump_tree(node_t *root,int n_dims);
 double **computeMostDistantPoints(double **pts, int n_dims, int n_points);
 double computeDistance(double *p1, double *p2, int n_dims, int starter);
 void orthogonalProjection(double **pts, double *a,double *b,int n_dims, int n_points);
@@ -48,18 +49,42 @@ int main(int argc, char *argv[])
   int n_dims = 0;
   long n_points = 0;
   node_t *root;
+  int id = 0;
 
   pts = get_points(argc, argv, &n_dims, &n_points);
-  root = build_tree(pts, n_dims, n_points);
+  root = build_tree(pts, n_dims, n_points, &id);
   exec_time += omp_get_wtime();
   fprintf(stderr, "%.1lf\n", exec_time);
-  dump_tree(root); // to the stdout!
+  dump_tree(root,n_dims); // to the stdout!
 }
 
 
-void dump_tree(node_t *root)
+void dump_tree(node_t *node,int n_dims)
 {
-
+  int i =0;
+  
+  if(node->L != NULL){
+    printf(" node %d %d %d %f ",node->id, (node->L)->id,(node->R)->id, node->radius);
+    for(i=0;i<n_dims;i++){
+      printf("%f ",(node->center)[i]);
+    }
+    printf("\n");
+    dump_tree(node->L, n_dims);
+  }
+  else{
+    printf(" node %d -1 -1 %f ",node->id, node->radius);
+    for(i=0;i<n_dims;i++){
+      printf("%f ",(node->center)[i]);
+    }
+    printf("\n");
+    return;
+  } 
+  if(node->R != NULL){
+    dump_tree(node->R, n_dims);
+  }
+  else{
+    return;
+  } 
 }
 
 //calculate the distance between two points
@@ -102,8 +127,6 @@ void orthogonalProjection(double **pts, double *a,double *b,int n_dims, int n_po
       pts[j][n_dims + i] = ((result1/result2) * b_a[i]) + a[i];
     }
   }
-
-
 }
 
 //choose the two points that have a greater distance
@@ -114,12 +137,15 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points)
   int a_index = 0;
   double greaterDistance = 0;
   double possibleGreaterDistance = 0;
+
+/* Allocation of A and B points */
   double **mostDistant = (double **)malloc(2 * sizeof(double*));
   for(i = 0; i < 2; i++)
   {
     mostDistant[i] = (double *)malloc(n_dims * sizeof(double));
   }
 
+// Find the most Left Point 
   for(i=1;i<n_points;i++)
   {
     if(pts[initial_index][n_dims*2 +1] > pts[i][n_dims*2 + 1])
@@ -128,7 +154,7 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points)
     }
   }
   
-
+// Find Point A 
   for(i=0; i<n_points ; i++){
     possibleGreaterDistance = computeDistance(pts[initial_index], pts[i], n_dims, 0);
     if( possibleGreaterDistance > greaterDistance)
@@ -139,6 +165,8 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points)
       }
   }
   greaterDistance = 0;
+
+// Find Point B
   for(i=0; i<n_points; i++){ 
     possibleGreaterDistance = computeDistance(pts[a_index], pts[i], n_dims, 0);
     if( possibleGreaterDistance > greaterDistance)
@@ -269,7 +297,7 @@ int partition(double **array, int low, int high, int n_dims) {
   swap(&array[i + 1], &array[high]);
   return (i + 1);
 }
-
+/* Quick Sort Algorithm */
 void quickSort(double **array, int low, int high, int n_dims) {
   if (low < high) {
   
@@ -286,22 +314,36 @@ void quickSort(double **array, int low, int high, int n_dims) {
 }
 
 
-//create the ball tree
-node_t *build_tree(double **pts, int n_dims,int n_points)
+/************************************* BALL CREATION ******************************************/
+node_t *build_tree(double **pts, int n_dims,int n_points,int *id)
 {
+  /* Ball Allocation */
+  node_t *node = (node_t *)malloc(sizeof(node_t));
+
+  /****** Leaf Case Creation*******/
   if(n_points == 1)
   {
+    /* Radius, ID, L, R, Center Filling */
+    node->radius = 0;
+    node->id = *id ;
+    node->L = NULL;
+    node->R = NULL;
     printf("median: raio = 0\n");
+    node->center = pts[0];
     for(int i=0; i < n_dims;i++)
     {
       printf("%f\n",pts[0][i]);
     }
     printf("\n");
-    return NULL;
+    return node;
   }
+
+  /****** Not Leaf Creation *****/
   int i=0;
   //int j=0;
   int index = 0;
+  double radius1 = 0;
+  double radius2 = 0;
   int odd = n_points % 2;
   double **mostDistant = (double **)malloc(2 * sizeof(double*)); //two most distant points in a set (matrix)
   for(i = 0; i < 2; i++)
@@ -309,26 +351,56 @@ node_t *build_tree(double **pts, int n_dims,int n_points)
     mostDistant[i] = (double *)malloc(n_dims * sizeof(double));
   }
 
+  /* Find A and B points */
   mostDistant = computeMostDistantPoints(pts, n_dims, n_points);
-  computeDistance(mostDistant[0], mostDistant[1], n_dims, 0);
+
+  //computeDistance(mostDistant[0], mostDistant[1], n_dims, 0); // ACHO QUE ISTO NAO É PRECISO
+
+  /* Orthogonal projetion points Creatrion */
   orthogonalProjection(pts,mostDistant[0],mostDistant[1], n_dims, n_points);
+
   //index = findMedian(pts, n_points, n_dims, mostDistant[0]);
+
+  /* Sorting Points by distance */
   quickSort(pts,0,n_points-1, n_dims);
   index = n_points/2;
+
+  /* node->center Allocation */
+  double* center = (double *)malloc(n_dims * sizeof(double));
+
+  /* Ball Center  Value and Assignment */
   printf("median: n_points=%d\n",n_points);
   for(i=0; i < n_dims;i++)
   {
-    printf("%f\n",(pts[index][i+ n_dims]+pts[index-1+odd][i+n_dims])/2);
+    center[i] = (pts[index][i+ n_dims]+pts[index-1+odd][i+n_dims])/2 ;
+    printf("%f\n",center[i]);
   }
   printf("\n");
-  build_tree(pts, n_dims, n_points/2);
-  build_tree(&pts[n_points/2], n_dims, n_points/2 + odd);
+  node->center = center;
 
-  
+  /* Ball Radius computation  */
+  if((radius1 = computeDistance(mostDistant[0],center,n_dims,0))>(radius2=computeDistance(mostDistant[0],center,n_dims,0))){
+    node->radius = radius1;
+  }
+  else{
+    node->radius = radius2;
+  }
 
+  /* Node ID association */
+  printf("id: %d\n",*id);
+  node->id = *id;
 
+  /* Left Ball Creation */
+  *id=*id+1;
+  printf("id: %d\n",*id);
+  node->L = build_tree(pts, n_dims, n_points/2, &(*id));
 
-  return NULL;
+  /* Right Ball Creation*/
+  *id=*id+1;
+  printf("id: %d\n",*id);
+  node->R = build_tree(&pts[n_points/2], n_dims, n_points/2 + odd, &(*id));
+
+  return node;
 }
 
 
@@ -337,7 +409,7 @@ double **create_array_pts(int n_dims, long np)
     double *_p_arr;
     double **p_arr;
 
-    _p_arr = (double *) malloc((n_dims * np * 2 + np) *sizeof(double));
+    _p_arr = (double *) malloc((n_dims * np * 2 + np) *sizeof(double));/* Allocation of points and space for orthogonal points */
     p_arr = (double **) malloc(np * sizeof(double *));
     if((_p_arr == NULL) || (p_arr == NULL)){
         printf("Error allocating array of points, exiting.\n");
