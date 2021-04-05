@@ -55,6 +55,7 @@ int main(int argc, char *argv[])
   root = build_tree(pts, n_dims, n_points, &id);
   exec_time += omp_get_wtime();
   fprintf(stderr, "%.1lf\n", exec_time);
+  printf("%d %d \n", n_dims, id+1);
   dump_tree(root,n_dims); // to the stdout!
 }
 
@@ -64,7 +65,7 @@ void dump_tree(node_t *node,int n_dims)
   int i =0;
   
   if(node->L != NULL){
-    printf(" node %d %d %d %f ",node->id, (node->L)->id,(node->R)->id, node->radius);
+    printf("%d %d %d %f ",node->id, (node->L)->id,(node->R)->id, node->radius);
     for(i=0;i<n_dims;i++){
       printf("%f ",(node->center)[i]);
     }
@@ -72,7 +73,7 @@ void dump_tree(node_t *node,int n_dims)
     dump_tree(node->L, n_dims);
   }
   else{
-    printf(" node %d -1 -1 %f ",node->id, node->radius);
+    printf("%d -1 -1 %f ",node->id, node->radius);
     for(i=0;i<n_dims;i++){
       printf("%f ",(node->center)[i]);
     }
@@ -328,13 +329,7 @@ node_t *build_tree(double **pts, int n_dims,int n_points,int *id)
     node->id = *id ;
     node->L = NULL;
     node->R = NULL;
-    printf("median: raio = 0\n");
     node->center = pts[0];
-    for(int i=0; i < n_dims;i++)
-    {
-      printf("%f\n",pts[0][i]);
-    }
-    printf("\n");
     return node;
   }
 
@@ -354,8 +349,6 @@ node_t *build_tree(double **pts, int n_dims,int n_points,int *id)
   /* Find A and B points */
   mostDistant = computeMostDistantPoints(pts, n_dims, n_points);
 
-  //computeDistance(mostDistant[0], mostDistant[1], n_dims, 0); // ACHO QUE ISTO NAO É PRECISO
-
   /* Orthogonal projetion points Creatrion */
   orthogonalProjection(pts,mostDistant[0],mostDistant[1], n_dims, n_points);
 
@@ -369,13 +362,11 @@ node_t *build_tree(double **pts, int n_dims,int n_points,int *id)
   double* center = (double *)malloc(n_dims * sizeof(double));
 
   /* Ball Center  Value and Assignment */
-  printf("median: n_points=%d\n",n_points);
   for(i=0; i < n_dims;i++)
   {
     center[i] = (pts[index][i+ n_dims]+pts[index-1+odd][i+n_dims])/2 ;
-    printf("%f\n",center[i]);
   }
-  printf("\n");
+
   node->center = center;
 
   /* Ball Radius computation  */
@@ -387,17 +378,14 @@ node_t *build_tree(double **pts, int n_dims,int n_points,int *id)
   }
 
   /* Node ID association */
-  printf("id: %d\n",*id);
   node->id = *id;
 
   /* Left Ball Creation */
   *id=*id+1;
-  printf("id: %d\n",*id);
   node->L = build_tree(pts, n_dims, n_points/2, &(*id));
 
   /* Right Ball Creation*/
   *id=*id+1;
-  printf("id: %d\n",*id);
   node->R = build_tree(&pts[n_points/2], n_dims, n_points/2 + odd, &(*id));
 
   return node;
