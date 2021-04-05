@@ -93,7 +93,7 @@ double computeDistance(double *p1, double *p2, int n_dims, int starter)
 {
     double result = 0;
     int i = 0;
-
+    
     for(i=0; i<n_dims; i++)
     {
       result = result + ((p1[i] - p2[i+starter]) * (p1[i] - p2[i+starter]));
