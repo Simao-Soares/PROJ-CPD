@@ -112,7 +112,7 @@ void orthogonalProjection(double **pts, double *a,double *b,int n_dims, int n_po
     double result2 = 0;
     double *b_a = (double *)malloc(n_dims * sizeof(double*));
 
-    #pragma omp parallel for
+    #pragma omp parallel for private(j,result1,result2)
     for(j=0;j<n_points;j++)
     {
         result1 = 0;
@@ -138,8 +138,8 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points)
   int i = 0;
   int initial_index = 0;
   int a_index = 0;
-  double greaterDistance = 0;
-  double possibleGreaterDistance = 0;
+  double greaterDistanceA = 0; //to compare between different threads
+  double greaterDistanceB = 0; //to compare between different threads
 
 /* Allocation of A and B points */
   double **mostDistant = (double **)malloc(2 * sizeof(double*));
@@ -148,35 +148,73 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points)
     mostDistant[i] = (double *)malloc(n_dims * sizeof(double));
   }
 
-// Find the most Left Point 
-  for(i=1;i<n_points;i++)
-  {
-    if(pts[initial_index][n_dims*2 +1] > pts[i][n_dims*2 + 1])
-    {
-      initial_index = i;
-    }
-  }
-  
-// Find Point A 
-  for(i=0; i<n_points ; i++){
-    possibleGreaterDistance = computeDistance(pts[initial_index], pts[i], n_dims, 0);
-    if( possibleGreaterDistance > greaterDistance)
-      {
-        greaterDistance = possibleGreaterDistance;
-        a_index = i;
-        mostDistant[0] = pts[i];
-      }
-  }
-  greaterDistance = 0;
+  #pragma omp parallel
+  { 
+    int index_local = 0;
+    double possibleGreaterDistance = 0;
+    double max_local = 0;
 
-// Find Point B
-  for(i=0; i<n_points; i++){ 
-    possibleGreaterDistance = computeDistance(pts[a_index], pts[i], n_dims, 0);
-    if( possibleGreaterDistance > greaterDistance)
+    // Find the most Left Point
+    #pragma omp for nowait
+    for(i=1;i<n_points;i++)
+    {
+      if(pts[index_local][n_dims*2 +1] > pts[i][n_dims*2 + 1])
       {
-        greaterDistance = possibleGreaterDistance;
-        mostDistant[1] = pts[i];
+        index_local = i;
+      }
+    }
+    #pragma omp critical
+    {
+      if(pts[initial_index][n_dims*2 +1] > pts[index_local][n_dims*2 + 1])
+      {
+        initial_index = index_local;
+      }
+    }
+
+    index_local = 0;
+    possibleGreaterDistance = 0;
+    max_local = 0;
+  
+// Find Point A  
+    #pragma omp for nowait
+    for(i=0; i<n_points ; i++){
+      possibleGreaterDistance = computeDistance(pts[initial_index], pts[i], n_dims, 0);
+      if( possibleGreaterDistance > max_local)
+        {
+          max_local = possibleGreaterDistance;
+          index_local = i;
+          
+        }
+    }
+    #pragma omp critical 
+    {
+        if (max_local > greaterDistanceA) {
+            greaterDistanceA = max_local;
+            a_index = index_local;
+            mostDistant[0] = pts[index_local];
+        }
+    }
+
+// Find Point B 
+    index_local = 0;
+    possibleGreaterDistance = 0;
+    max_local = 0;
+    #pragma omp for nowait
+    for(i=0; i<n_points; i++){ 
+      possibleGreaterDistance = computeDistance(pts[a_index], pts[i], n_dims, 0);
+      if( possibleGreaterDistance > max_local)
+      {
+        max_local = possibleGreaterDistance;
+        index_local = i;
       }  
+    }
+    #pragma omp critical 
+    {
+        if (max_local > greaterDistanceB) {
+            greaterDistanceB = max_local;
+            mostDistant[1] = pts[index_local];
+        }
+    }
   }
   return mostDistant;
 }
@@ -309,10 +347,14 @@ void quickSort(double **array, int low, int high, int n_dims) {
   int pi = partition(array, low, high, n_dims);
   
   // Sort the elements on the left of pivot
-  quickSort(array, low, pi - 1, n_dims);
+  #pragma omp task shared(array) firstprivate(pi, low)
+    {quickSort(array, low, pi - 1, n_dims);}
   
   // Sort the elements on the right of pivot
-  quickSort(array, pi + 1, high, n_dims);
+  #pragma omp task shared(array) firstprivate(pi, high)
+    {quickSort(array, pi + 1, high, n_dims);}
+
+    #pragma omp taskwait
   }
 }
 
