@@ -52,7 +52,11 @@ int main(int argc, char *argv[])
   int id = 0;
 
   pts = get_points(argc, argv, &n_dims, &n_points);
-  root = build_tree(pts, n_dims, n_points, &id);
+  #pragma omp parallel
+  {
+    #pragma omp single
+      root = build_tree(pts, n_dims, n_points, &id);
+  }
   exec_time += omp_get_wtime();
   fprintf(stderr, "%.1lf\n", exec_time);
   printf("%d %d \n", n_dims, id+1);
@@ -93,11 +97,10 @@ double computeDistance(double *p1, double *p2, int n_dims, int starter)
 {
     double result = 0;
     int i = 0;
-
-    //#pragma omp parallel for reduction(+:result)
-    for(i=0; i<n_dims; i++) //Hipotese de criar if n_dims > x (qual x?) e n_points < y!!!
+    
+    for(i=0; i<n_dims; i++)
     {
-        result = result + ((p1[i] - p2[i+starter]) * (p1[i] - p2[i+starter]));
+      result = result + ((p1[i] - p2[i+starter]) * (p1[i] - p2[i+starter]));
     }
     result = sqrt(result);
     return result;
@@ -106,30 +109,29 @@ double computeDistance(double *p1, double *p2, int n_dims, int starter)
 //perform the orthogonal projection of all points onto line ab
 void orthogonalProjection(double **pts, double *a,double *b,int n_dims, int n_points)
 {
-    int i = 0;
-    int j =0;
-    double result1 = 0;
-    double result2 = 0;
-    double *b_a = (double *)malloc(n_dims * sizeof(double*));
+  int i = 0;
+  int j =0;
+  double result1 = 0;
+  double result2 = 0;
+  double *b_a = (double *)malloc(n_dims * sizeof(double*));
 
-    #pragma omp parallel for private(j,result1,result2)
-    for(j=0;j<n_points;j++)
+  for(j=0;j<n_points;j++)
+  {
+    result1 = 0;
+    result2 = 0;
+    for(i = 0; i<n_dims; i++)
     {
-        result1 = 0;
-        result2 = 0;
-        for(i = 0; i<n_dims; i++)
-        {
-        pts[j][n_dims + i]= pts[j][i]-a[i];
-        b_a[i] = b[i] - a[i];
-        result1 = result1 + (pts[j][n_dims +i] * b_a[i]);
-        result2 = result2 + (b_a[i] * b_a[i]);
-        }
-
-        for(i = 0; i<n_dims; i++)
-        {
-        pts[j][n_dims + i] = ((result1/result2) * b_a[i]) + a[i];
-        }
+      pts[j][n_dims + i]= pts[j][i]-a[i];
+      b_a[i] = b[i] - a[i];
+      result1 = result1 + (pts[j][n_dims +i] * b_a[i]);
+      result2 = result2 + (b_a[i] * b_a[i]);
     }
+
+    for(i = 0; i<n_dims; i++)
+    {
+      pts[j][n_dims + i] = ((result1/result2) * b_a[i]) + a[i];
+    }
+  }
 }
 
 //choose the two points that have a greater distance
@@ -138,180 +140,47 @@ double **computeMostDistantPoints(double **pts, int n_dims, int n_points)
   int i = 0;
   int initial_index = 0;
   int a_index = 0;
-  double greaterDistanceA = 0; //to compare between different threads
-  double greaterDistanceB = 0; //to compare between different threads
+  double greaterDistance = 0;
+  double possibleGreaterDistance = 0;
 
 /* Allocation of A and B points */
   double **mostDistant = (double **)malloc(2 * sizeof(double*));
-  for(i = 0; i < 2; i++)
+ 
+
+// Find the most Left Point 
+  for(i=1;i<n_points;i++)
   {
-    mostDistant[i] = (double *)malloc(n_dims * sizeof(double));
+    if(pts[initial_index][n_dims*2 +1] > pts[i][n_dims*2 + 1])
+    {
+      initial_index = i;
+    }
   }
-
-  #pragma omp parallel
-  { 
-    int index_local = 0;
-    double possibleGreaterDistance = 0;
-    double max_local = 0;
-
-    // Find the most Left Point
-    #pragma omp for nowait
-    for(i=1;i<n_points;i++)
-    {
-      if(pts[index_local][n_dims*2 +1] > pts[i][n_dims*2 + 1])
-      {
-        index_local = i;
-      }
-    }
-    #pragma omp critical
-    {
-      if(pts[initial_index][n_dims*2 +1] > pts[index_local][n_dims*2 + 1])
-      {
-        initial_index = index_local;
-      }
-    }
-
-    index_local = 0;
-    possibleGreaterDistance = 0;
-    max_local = 0;
   
-// Find Point A  
-    #pragma omp for nowait
-    for(i=0; i<n_points ; i++){
-      possibleGreaterDistance = computeDistance(pts[initial_index], pts[i], n_dims, 0);
-      if( possibleGreaterDistance > max_local)
-        {
-          max_local = possibleGreaterDistance;
-          index_local = i;
-          
-        }
-    }
-    #pragma omp critical 
-    {
-        if (max_local > greaterDistanceA) {
-            greaterDistanceA = max_local;
-            a_index = index_local;
-            mostDistant[0] = pts[index_local];
-        }
-    }
-
-// Find Point B 
-    index_local = 0;
-    possibleGreaterDistance = 0;
-    max_local = 0;
-    #pragma omp for nowait
-    for(i=0; i<n_points; i++){ 
-      possibleGreaterDistance = computeDistance(pts[a_index], pts[i], n_dims, 0);
-      if( possibleGreaterDistance > max_local)
+// Find Point A 
+  for(i=0; i<n_points ; i++){
+    possibleGreaterDistance = computeDistance(pts[initial_index], pts[i], n_dims, 0);
+    if( possibleGreaterDistance > greaterDistance)
       {
-        max_local = possibleGreaterDistance;
-        index_local = i;
+        greaterDistance = possibleGreaterDistance;
+        a_index = i;
+        mostDistant[0] = pts[i];
+      }
+  }
+  greaterDistance = 0;
+
+// Find Point B
+  for(i=0; i<n_points; i++){ 
+    possibleGreaterDistance = computeDistance(pts[a_index], pts[i], n_dims, 0);
+    if( possibleGreaterDistance > greaterDistance)
+      {
+        greaterDistance = possibleGreaterDistance;
+        mostDistant[1] = pts[i];
       }  
-    }
-    #pragma omp critical 
-    {
-        if (max_local > greaterDistanceB) {
-            greaterDistanceB = max_local;
-            mostDistant[1] = pts[index_local];
-        }
-    }
   }
   return mostDistant;
 }
 
 
-int findMedian(double **pts, int n_points,int n_dims, double *a)
-{
-  int i = 0;
-  int sumLefts = 0;
-  int medianIndex = n_points/2;
-  int notLeaf = 1;
-  //int even = n_points % 2;
-  qNode *root = NULL;
-  root = (qNode *) malloc(sizeof(qNode));
-  root->right = NULL;
-  root->left = NULL;
-  root->nLefts = 0;
-  qNode *aux = NULL;
-  aux = (qNode *) malloc(sizeof(qNode));
-
-
-  
-  root->value = computeDistance(a, pts[medianIndex], n_dims, n_dims);
-  root->id = medianIndex;
-
-  for(i=0; i< n_points; i++)
-  {
-    if(i == medianIndex)
-    {
-      continue;
-    }
-    qNode *me = NULL;
-    me = (qNode *) malloc(sizeof(qNode));
-    me->right = NULL;
-    me->left = NULL;
-    me->value = computeDistance(a, pts[i], n_dims, n_dims);
-    me->nLefts = 0;
-    me->id = i;
-    aux = root;
-    notLeaf = 1;
-    while(notLeaf)
-    {
-      if(me->value > aux->value){
-        if(aux->right == NULL){
-          aux->right = me;
-          notLeaf = 0;
-        }
-        else{
-          aux = aux->right;
-        }
-      }
-      else{
-        aux->nLefts ++;
-        if(aux->left == NULL){
-          aux->left = me;
-          notLeaf = 0;
-        }
-        else{
-          aux = aux->left;
-        }
-      }
-    }
-  }
-
-  aux = root;
-  for(i=0; i<n_points; i++)
-  {
-    while(aux->left != NULL)
-    {
-      aux = aux->left;
-    }
-
-  }
-  while(aux->nLefts + sumLefts != medianIndex)
-  {
-
-    if(aux->nLefts + sumLefts < medianIndex){
-      if(aux->right != NULL){
-        sumLefts = sumLefts + aux->nLefts + 1;
-        aux = aux->right;
-      }
-      else{
-        return aux->id;
-      }
-    }
-    else{
-      if(aux->left != NULL){
-        aux = aux->left;
-      }
-      else{
-        return aux->id;
-      }
-    }
-  }
-  return aux->id;
-
-}
 
 void swap(double **a, double **b) {
   double *t = NULL;
@@ -347,14 +216,10 @@ void quickSort(double **array, int low, int high, int n_dims) {
   int pi = partition(array, low, high, n_dims);
   
   // Sort the elements on the left of pivot
-  #pragma omp task shared(array) firstprivate(pi, low)
-    {quickSort(array, low, pi - 1, n_dims);}
+  quickSort(array, low, pi - 1, n_dims);
   
   // Sort the elements on the right of pivot
-  #pragma omp task shared(array) firstprivate(pi, high)
-    {quickSort(array, pi + 1, high, n_dims);}
-
-    #pragma omp taskwait
+  quickSort(array, pi + 1, high, n_dims);
   }
 }
 
@@ -377,6 +242,9 @@ node_t *build_tree(double **pts, int n_dims,int n_points,int *id)
     return node;
   }
 
+  node->id = *id;
+
+
   /****** Not Leaf Creation *****/
   int i=0;
   //int j=0;
@@ -384,11 +252,7 @@ node_t *build_tree(double **pts, int n_dims,int n_points,int *id)
   double radius1 = 0;
   double radius2 = 0;
   int odd = n_points % 2;
-  double **mostDistant = (double **)malloc(2 * sizeof(double*)); //two most distant points in a set (matrix)
-  for(i = 0; i < 2; i++)
-  {
-    mostDistant[i] = (double *)malloc(n_dims * sizeof(double));
-  }
+  double **mostDistant = NULL; //two most distant points in a set (matrix)
 
   /* Find A and B points */
   mostDistant = computeMostDistantPoints(pts, n_dims, n_points);
@@ -422,16 +286,21 @@ node_t *build_tree(double **pts, int n_dims,int n_points,int *id)
   }
 
   /* Node ID association */
-  node->id = *id;
+      /* Left Ball Creation */
+      #pragma omp task shared(id)
+        {
+          *id = *id +1; 
+          node->L = build_tree(pts, n_dims, n_points/2, &(*id));
+        }
+      
+      #pragma omp taskwait
 
-  /* Left Ball Creation */
-  *id=*id+1;
-  node->L = build_tree(pts, n_dims, n_points/2, &(*id));
-
-  /* Right Ball Creation*/
-  *id=*id+1;
-  node->R = build_tree(&pts[n_points/2], n_dims, n_points/2 + odd, &(*id));
-
+      /* Right Ball Creation*/
+      #pragma omp task shared(id)
+        {
+          *id = *id +1; 
+          node->R = build_tree(&pts[n_points/2], n_dims, n_points/2 + odd, &(*id));
+        }
   return node;
 }
 
@@ -448,7 +317,6 @@ double **create_array_pts(int n_dims, long np)
         printf("Error allocating array of points, exiting.\n");
         exit(4);
     }
-
     #pragma omp parallel for private(i)
     for(i = 0; i < np; i++)
         p_arr[i] = &_p_arr[i * 2 * n_dims + i];
