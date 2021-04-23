@@ -46,21 +46,28 @@ int main(int argc, char *argv[])
   double exec_time;
   exec_time = -omp_get_wtime();
   double **pts;
+  double **pts_aux;
+  double *_pts_aux;
   int n_dims = 0;
   long n_points = 0;
   node_t *root;
   int id = 0;
 
   pts = get_points(argc, argv, &n_dims, &n_points);
+  pts_aux = pts ;
+  _pts_aux = pts[0];
   #pragma omp parallel
   {
     #pragma omp single
-      root = build_tree(pts, n_dims, n_points, &id);
+      root = build_tree(pts_aux, n_dims, n_points, &id);
   }
   exec_time += omp_get_wtime();
   fprintf(stderr, "%.1lf\n", exec_time);
   printf("%d %d \n", n_dims, id+1);
   dump_tree(root,n_dims); // to the stdout!
+
+  free(_pts_aux);
+  free(pts);
 }
 
 
@@ -82,14 +89,20 @@ void dump_tree(node_t *node,int n_dims)
       printf("%f ",(node->center)[i]);
     }
     printf("\n");
+    //free(node->center);
+    free(node);
     return;
   } 
   if(node->R != NULL){
     dump_tree(node->R, n_dims);
   }
   else{
+    //free(node->center);
+    //free(node);
     return;
-  } 
+  }
+  free(node->center);
+  free(node); 
 }
 
 //calculate the distance between two points
@@ -132,6 +145,7 @@ void orthogonalProjection(double **pts, double *a,double *b,int n_dims, int n_po
       pts[j][n_dims + i] = ((result1/result2) * b_a[i]) + a[i];
     }
   }
+  free(b_a);
 }
 
 //choose the two points that have a greater distance
@@ -285,6 +299,8 @@ node_t *build_tree(double **pts, int n_dims,int n_points,int *id)
     node->radius = radius2;
   }
 
+  free(mostDistant); 
+
   /* Node ID association */
       /* Left Ball Creation */
       #pragma omp task shared(id)
@@ -317,7 +333,7 @@ double **create_array_pts(int n_dims, long np)
         printf("Error allocating array of points, exiting.\n");
         exit(4);
     }
-    #pragma omp parallel for private(i)
+    //#pragma omp parallel for private(i)
     for(i = 0; i < np; i++)
         p_arr[i] = &_p_arr[i * 2 * n_dims + i];
 
